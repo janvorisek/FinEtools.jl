@@ -1,3 +1,40 @@
+module modfld1
+using FinEtools
+using Test
+function test()
+    datamatrix = [0.173214   0.0849788
+    0.0857544  0.499712
+    0.817451   0.909849
+    0.790466   0.419653
+    0.85838    0.641268]
+    f = GeneralField(datamatrix)
+    @test getdofvalue(f, 2, 2) ≈ 0.499712
+    @test getdofvalue(f, 5, 1) ≈ 0.85838
+    setdofvalue!(f, 4, 1, -0.8)
+    @test getdofvalue(f, 4, 1) ≈ -0.8
+    setdofvalue!(f, 1, 2, -0.38)
+    @test getdofvalue(f, 1, 2) ≈ -0.38
+    setdofvalues!(f, -3.0)
+    @test getdofvalue(f, 1, 2) ≈ -3.0
+    setdofvalue!(f, 3, 2, +300.0)
+    @test getdofvalue(f, 3, 2) ≈ +300.0
+    vals = fill(0.0, 2)
+    @test getdofvalues!(f, vals, 3) ≈ [-3.0, 300.0]
+    v = getdofsvector(f, 2)
+    @test getdofvalue(v, 2) ≈ -3.0
+    for i in 1:size(datamatrix, 1), j in 1:size(datamatrix, 2)
+        setdofvalue!(f, i, j, datamatrix[i, j])
+    end
+    a = dofvaluesasarray(f)
+    @test a ≈ datamatrix
+    wipe!(f)
+    a = dofvaluesasarray(f)
+    @test a ≈  0 .* datamatrix
+    true
+end
+end
+using .modfld1
+modfld1.test()
 
 module mmiscellaneous1mmm
 using FinEtools
@@ -682,17 +719,16 @@ function test()
     u = deepcopy(geom)
     setebc!(u)
     copyto!(u, geom)
-    @test norm(u.values - geom.values) < 1.0e-5
+    @test norm(dofvaluesasarray(u) - dofvaluesasarray(geom)) < 1.0e-5
     wipe!(u)
     numberdofs!(u)
-    @test norm(u.dofnums) > 1.0e-3
     wipe!(u)
-    @test norm(u.dofnums) == 0
+    @test u.nfreedofs == 0
     setebc!(u, [1, 3])
     numberdofs!(u)
-    @test norm(u.dofnums[1,:]) == 0
-    @test norm(u.dofnums[3,:]) == 0
-    @test norm(u.dofnums[2,:]) > 0.0
+    @test norm([getdofnum(u, 1, dof) for dof in 1:3]) == 0
+    @test norm([getdofnum(u, 3, dof) for dof in 1:3]) == 0
+    @test norm([getdofnum(u, 2, dof) for dof in 1:3]) > 0.0
 end
 end
 using .mmmfieldmm1
@@ -794,7 +830,7 @@ using FinEtools
 using Test
 function test()
     f = NodalField(zeros(5, 1))
-    setebc!(f, [3,4], true, 1;        val=7.0)
+    setebc!(f, [3,4], true, 1; val=7.0)
     # display(f)
     applyebc!(f)
     dest = zeros(2,1)

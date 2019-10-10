@@ -107,10 +107,10 @@ function test()
   geom = NodalField(fens.xyz)
 
   File =  "L_shape.vtk"
-  vtkexportmesh(File, connasarray(fes), geom.values, FinEtools.MeshExportModule.Q4);
+  vtkexportmesh(File, connasarray(fes), dofvaluesasarray(geom), FinEtools.MeshExportModule.Q4);
   # @async run(`"paraview.exe" $File`)
   rm(File)
-  vtkexportmesh(File, fes.conn, geom.values, FinEtools.MeshExportModule.Q4);
+  vtkexportmesh(File, fes.conn, dofvaluesasarray(geom), FinEtools.MeshExportModule.Q4);
   # @async run(`"paraview.exe" $File`)
   rm(File)
 
@@ -252,7 +252,7 @@ function test()
     geom = NodalField(fens.xyz)
 
     File =  "mesh_smoothing_after.vtk"
-    vtkexportmesh(File, connasarray(fes), geom.values, FinEtools.MeshExportModule.T3);
+    vtkexportmesh(File, connasarray(fes), dofvaluesasarray(geom), FinEtools.MeshExportModule.T3);
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -305,7 +305,7 @@ function test()
     geom = NodalField(fens.xyz)
 
     File =  "mesh_smoothing_after.vtk"
-    vtkexportmesh(File, connasarray(fes), geom.values, FinEtools.MeshExportModule.T3);
+    vtkexportmesh(File, connasarray(fes), dofvaluesasarray(geom), FinEtools.MeshExportModule.T3);
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1049,10 +1049,10 @@ function test()
     fc = NodalField(zeros(count(fensc), 1))
     for i = 1:count(fensc)
         x, y, z = fensc.xyz[i, :]
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1,  sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1068,20 +1068,20 @@ function test()
     referenceff = NodalField(zeros(count(fensf), 1))
     for i = 1:count(fensf)
         x, y, z = fensf.xyz[i, :]
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = NodalField(referenceff.values - ff.values)
+    diffff = NodalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(3, 4)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1121,10 +1121,10 @@ function test()
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y, z = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1142,20 +1142,20 @@ function test()
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y, z = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(3, 4)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1196,10 +1196,10 @@ function test()
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y, z = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1217,20 +1217,20 @@ function test()
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y, z = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(3, 4)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1272,10 +1272,10 @@ function test()
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y, z = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1293,20 +1293,20 @@ function test()
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y, z = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(3, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1347,10 +1347,10 @@ function test()
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y, z = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1368,20 +1368,20 @@ function test()
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y, z = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1,  sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(3, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1422,10 +1422,10 @@ function test()
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y, z = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     # File = "momap2para3-coarse.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    # MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
@@ -1443,20 +1443,20 @@ function test()
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y, z = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1,  sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     # File = "momap2para3-reference.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     # File = "momap2para3-fine.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(3, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1497,10 +1497,10 @@ Meshing = Q4blockx
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     # File = "momap2para3-coarse.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    # MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
@@ -1518,20 +1518,20 @@ Meshing = Q4blockx
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     # File = "momap2para3-reference.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     # File = "momap2para3-fine.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(2, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1572,10 +1572,10 @@ Meshing = Q8blockx
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     # File = "momap2para3-coarse.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    # MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
@@ -1593,20 +1593,20 @@ Meshing = Q8blockx
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     # File = "momap2para3-reference.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     # File = "momap2para3-fine.vtk"
-    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    # MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # # @async run(`"paraview.exe" $File`)
     # try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(2, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1647,10 +1647,10 @@ Meshing = T3blockx
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1668,20 +1668,20 @@ Meshing = T3blockx
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(2, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1722,10 +1722,10 @@ Meshing = T6blockx
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     File = "momap2para12-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1743,20 +1743,20 @@ Meshing = T6blockx
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B))
     end
     File = "momap2para12-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para12-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(2, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1780,7 +1780,7 @@ function test()
     B = 200.0*phun("m") # length  of loaded rectangle
     C = 100.0*phun("m") # span of the plate
 
-Meshing = L2blockx
+    Meshing = L2blockx
     # Select how find the mesh should be
     Refinement = 2
     nA, nB, nC = Refinement * 1, Refinement * 6, Refinement * 4;
@@ -1795,11 +1795,11 @@ Meshing = L2blockx
     for i = 1:count(fesc)
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
-        x = centroid
-        fc.values[i, :] = sin.(2*x/A)
+        x = centroid[1]
+        setdofvalue!(fc, i, 1, sin.(2*x/A))
     end
     File = "momap2para12-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1814,21 +1814,21 @@ Meshing = L2blockx
     for i = 1:count(fesf)
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
-        x = centroid
-        referenceff.values[i, :] = sin.(2*x/A)
+        x = centroid[1]
+        setdofvalue!(referenceff, i, 1, sin.(2*x/A))
     end
     File = "momap2para12-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para12-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(1, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -1868,11 +1868,11 @@ Meshing = L3blockx
     for i = 1:count(fesc)
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
-        x = centroid
-        fc.values[i, :] = sin.(2*x/A)
+        x = centroid[1]
+        setdofvalue!(fc, i, 1, sin.(2*x/A))
     end
     File = "momap2para12-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -1887,21 +1887,21 @@ Meshing = L3blockx
     for i = 1:count(fesf)
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
-        x = centroid
-        referenceff.values[i, :] = sin.(2*x/A)
+        x = centroid[1]
+        setdofvalue!(referenceff, i, 1, sin.(2*x/A))
     end
     File = "momap2para12-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para12-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, GaussRule(1, 3)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -2842,10 +2842,10 @@ function test()
     fc = NodalField(zeros(count(fensc), 1))
     for i = 1:count(fensc)
         x, y, z = fensc.xyz[i, :]
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para61-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -2861,20 +2861,20 @@ function test()
     referenceff = NodalField(zeros(count(fensf), 1))
     for i = 1:count(fensf)
         x, y, z = fensf.xyz[i, :]
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para61-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para61-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values), ("ffcopy", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff)), ("ffcopy", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = NodalField(referenceff.values - ff.values)
+    diffff = NodalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(3, 4)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -2914,10 +2914,10 @@ function test()
         c = [k for k in fesc.conn[i]]
         centroid = NT * fensc.xyz[c, :]
         x, y, z = centroid
-        fc.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(fc, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-coarse.vtk"
-    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", fc.values)])
+    MeshExportModule.vtkexportmesh(File, fensc, fesc; scalars = [("fc", dofvaluesasarray(fc))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
@@ -2935,20 +2935,20 @@ function test()
         c = [k for k in fesf.conn[i]]
         centroid = NT * fensf.xyz[c, :]
         x, y, z = centroid
-        referenceff.values[i, :] .= sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0)
+        setdofvalue!(referenceff, i, 1, sin(2*x/A) * cos(6.5*y/B) * sin(3*z/C-1.0))
     end
     File = "momap2para3-reference.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", referenceff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("referenceff", dofvaluesasarray(referenceff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
     ff = transferfield!(ff, fensf, fesf, fc, fensc, fesc, tolerance)
     File = "momap2para3-fine.vtk"
-    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", ff.values), ("ffcopy", ff.values)])
+    MeshExportModule.vtkexportmesh(File, fensf, fesf; scalars = [("ff", dofvaluesasarray(ff)), ("ffcopy", dofvaluesasarray(ff))])
     # @async run(`"paraview.exe" $File`)
     try rm(File) catch end
 
-    diffff = ElementalField(referenceff.values - ff.values)
+    diffff = ElementalField(dofvaluesasarray(referenceff) - dofvaluesasarray(ff))
     femm  = FEMMBase(IntegDomain(fesf, SimplexRule(3, 4)))
     geom = NodalField(fensf.xyz)
     error = integratefieldfunction(femm, geom, diffff, (x, v) -> norm(v), 0.0)
@@ -3378,7 +3378,7 @@ function test()
 	alpha, beta, gamma, delta, eta, phi= 1.0/30, 1.0/34, -1.0/21, -1.0/51, -1.0/26, -1.0/35
 	ux(x, y) = alpha + beta * x + gamma * y
 	uy(x, y) = delta + eta * x + phi * y
-	
+
 	fens = FENodeSet([1.0 -0.3; 2.3 -0.3; 2.3 0.95; 1.0 0.95; 1.4 0.05; 1.9 -0.03; 1.7 0.5; 1.3 0.6])
 	fes = FESetQ4([1 2 6 5; 6 2 3 7; 7 3 4 8; 8 4 1 5; 5 6 7 8])
 
@@ -3396,7 +3396,7 @@ function test()
 
 	# for i in 5:8
 	# 	uexact = [ux(fens.xyz[i, :]...), uy(fens.xyz[i, :]...)]
-	# 	println("u.values[$i, :] = $(u.values[i, :]), uexact = [$(uexact)]")
+	# 	println("dofvaluesasarray(u)[$i, :] = $(dofvaluesasarray(u)[i, :]), uexact = [$(uexact)]")
 	# end
 
 	AE = AbaqusExporter("q4_stress_export");
@@ -3442,7 +3442,7 @@ function test()
 	alpha, beta, gamma, delta, eta, phi= 1.0/30, 1.0/34, -1.0/21, -1.0/51, -1.0/26, -1.0/35
 	ux(x, y) = alpha + beta * x + gamma * y
 	uy(x, y) = delta + eta * x + phi * y
-	
+
 	fens = FENodeSet([1.0 -0.3; 2.3 -0.3; 2.3 0.95; 1.0 0.95; 1.4 0.05; 1.9 -0.03; 1.7 0.5; 1.3 0.6])
 	fes = FESetQ4([1 2 6 5; 6 2 3 7; 7 3 4 8; 8 4 1 5; 5 6 7 8])
 
@@ -3460,7 +3460,7 @@ function test()
 
 	# for i in 5:8
 	# 	uexact = [ux(fens.xyz[i, :]...), uy(fens.xyz[i, :]...)]
-	# 	println("u.values[$i, :] = $(u.values[i, :]), uexact = [$(uexact)]")
+	# 	println("dofvaluesasarray(u)[$i, :] = $(dofvaluesasarray(u)[i, :]), uexact = [$(uexact)]")
 	# end
 
 	AE = AbaqusExporter("q4_stress_export1");
@@ -3505,7 +3505,7 @@ function test()
 	alpha, beta, gamma, delta, eta, phi= 1.0/30, 1.0/34, -1.0/21, -1.0/51, -1.0/26, -1.0/35
 	ux(x, y) = alpha + beta * x + gamma * y
 	uy(x, y) = delta + eta * x + phi * y
-	
+
 	fens = FENodeSet([1.0 -0.3; 2.3 -0.3; 2.3 0.95; 1.0 0.95; 1.4 0.05; 1.9 -0.03; 1.7 0.5; 1.3 0.6])
 	fes = FESetQ4([1 2 6 5; 6 2 3 7; 7 3 4 8; 8 4 1 5; 5 6 7 8])
 
@@ -3523,7 +3523,7 @@ function test()
 
 	# for i in 5:8
 	# 	uexact = [ux(fens.xyz[i, :]...), uy(fens.xyz[i, :]...)]
-	# 	println("u.values[$i, :] = $(u.values[i, :]), uexact = [$(uexact)]")
+	# 	println("dofvaluesasarray(u)[$i, :] = $(dofvaluesasarray(u)[i, :]), uexact = [$(uexact)]")
 	# end
 
 	AE = AbaqusExporter("q4_stress_export2");
@@ -3543,7 +3543,7 @@ function test()
 	MATERIAL(AE, "elasticity")
 	ELASTIC(AE, E, nu)
 	STEP_PERTURBATION_STATIC(AE)
-	BOUNDARY(AE, "ASSEM1.INSTNC1", u.is_fixed, u.fixed_values)
+	BOUNDARY(AE, "ASSEM1.INSTNC1", isfixedasarray(u), fixeddofvaluesasarray(u))
 	END_STEP(AE)
 	close(AE)
 	s = readlines("q4_stress_export2.inp")
