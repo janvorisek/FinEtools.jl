@@ -8,31 +8,28 @@ module NodalFieldModule
 using ..FTypesModule: FInt, FFlt, FCplxFlt, FFltVec, FIntVec, FFltMat, FIntMat, FMat, FVec, FDataDict
 import ..FieldModule: AbstractField, nents
 import ..FieldModule.@add_Field_fields
+import ..FieldModule.FieldDOFData
 
 """
-    NodalField{T<:Number} <: AbstractField
+    NodalField{T} <: AbstractField{T}
 
 Nodal field, meaning the entities are the finite element nodes.
 """
-mutable struct NodalField{T<:Number} <: AbstractField
-    @add_Field_fields()
+mutable struct NodalField{T} <: AbstractField{T}
+    @add_Field_fields(T)
 end
 
 """
-    NodalField(data::FMat{T}=[]) where {T<:Number}
+    NodalField(datamatrix::FMat{T}=[]) where {T<:Number}
 
 Constructor of nodal field. The values of the field are given by the array
-on input, `data`. This array needs to have as many rows as there are nodes,
+on input, `datamatrix`. This array needs to have as many rows as there are nodes,
 and as many columns as there are degrees of freedom per node.
 """
-function NodalField(data::FMat{T}=[]) where {T<:Number}
-    values = deepcopy(data)
-    dofnums = 0*similar(values,FInt)
-    is_fixed = similar(values,Bool)
-    fill!(is_fixed, 0)
-    fixed_values = zeros(T,size(values))
+function NodalField(datamatrix::FMat{T}=[]) where {T<:Number}
+    data = [[FieldDOFData(datamatrix[idx, j], zero(T), 0, false) for j in 1:size(datamatrix, 2)] for idx in 1:size(datamatrix, 1)]
     nfreedofs = 0
-    return NodalField(values, dofnums, is_fixed, fixed_values, nfreedofs)
+    return NodalField(data, nfreedofs)
 end
 
 """
@@ -44,7 +41,7 @@ there is just one degree of freedom per nodes.
 """
 function NodalField(data::FVec{T}) where {T<:Number}
     return NodalField(reshape(data, length(data), 1))
-end 
+end
 
 """
     nnodes(self::NodalField)::FInt = nents(self)

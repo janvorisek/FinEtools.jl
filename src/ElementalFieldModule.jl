@@ -8,35 +8,31 @@ module ElementalFieldModule
 using ..FTypesModule: FInt, FFlt, FCplxFlt, FFltVec, FIntVec, FFltMat, FIntMat, FMat, FVec, FDataDict
 import ..FieldModule: AbstractField, nents
 import ..FieldModule.@add_Field_fields
-
+import ..FieldModule.FieldDOFData
 
 """
-    ElementalField{T<:Number} <: AbstractField
+    ElementalField{T} <: AbstractField{T}
 
 Elemental field, meaning the entities are finite elements.
 
 The values in the field are indexed by the element number.  This means  that
 there needs to be one field per finite element set.
 """
-mutable struct ElementalField{T<:Number} <: AbstractField
-	@add_Field_fields()
+mutable struct ElementalField{T} <: AbstractField{T}
+	@add_Field_fields(T)
 end
 
 """
-   ElementalField(data::FMat{T}=[]) where {T<:Number}
+   ElementalField(datamatrix::FMat{T}=[]) where {T<:Number}
 
 Constructor of elemental field. The values of the field are given by the array
-on input, `data`. This array needs to have as many rows as there are elements,
+on input, `datamatrix`. This array needs to have as many rows as there are elements,
 and as many columns as there are degrees of freedom per element.
 """
-function ElementalField(data::FMat{T}=[]) where {T<:Number}
-	values = deepcopy(data)
-	dofnums = 0*similar(values,FInt)
-	is_fixed = similar(values,Bool)
-	fill!(is_fixed, 0)
-	fixed_values = zeros(T,size(values))
-	nfreedofs = 0
-	return ElementalField(values, dofnums, is_fixed, fixed_values, nfreedofs)
+function ElementalField(datamatrix::FMat{T}=[]) where {T<:Number}
+	data = [[FieldDOFData(datamatrix[idx, j], zero(T), 0, false) for j in 1:size(datamatrix, 2)] for idx in 1:size(datamatrix, 1)]
+    nfreedofs = 0
+	return ElementalField(data, nfreedofs)
 end
 
 """
@@ -48,7 +44,7 @@ there is just one degree of freedom per element.
 """
 function ElementalField(data::FVec{T}) where {T<:Number}
     return ElementalField(reshape(data, length(data), 1))
-end 
+end
 
 """
     nelems(self::ElementalField)::FInt = nents(self)

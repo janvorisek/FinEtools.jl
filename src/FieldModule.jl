@@ -9,98 +9,115 @@ using ..FTypesModule: FInt, FFlt, FCplxFlt, FFltVec, FIntVec, FFltMat, FIntMat, 
 import Base.copyto!
 
 """
-	AbstractField
+    fixed_dofnum
+
+    This is how we  recognize fixed degrees of freedom: the degree of freedom
+    number is zero
+"""
+const fixed_dofnum = 0
+
+"""
+    FieldDOFData{T}
+
+Type of data stored  per degree of freedom for each entity in a field.
+"""
+mutable struct FieldDOFData{T}
+    dofvalue::T;
+    fixeddofvalue::T;
+    dofnum::FInt;
+    isfixed::Bool;
+end
+
+"""
+	AbstractField{T}
 
 Abstract field.
 
 Expected  attributes:
-  + `values::FMat{T}`: Array of degree of freedom parameters,  indexed by entity number
-  + `dofnums::FIntMat`: Array of degree of freedom numbers, indexed by entity number
-  + `is_fixed::Matrix{Bool}`: Array of Boolean flags, indexed by entity number
-  + `fixed_values::FMat{T}`: Array of fixed values, indexed by entity number
+  + `data::Vector{Vector{FieldDOFData{T}}}`: Vector of vectors of degree of freedom data per entity
   + `nfreedofs::FInt`: Total number of free degrees of freedom
 
 See also: [`@add_Field_fields()`](@ref) .
 """
-abstract type AbstractField end
+abstract type AbstractField{T<:Number} end
 
 """
-    add_Field_fields()
+    add_Field_fields(T)
 
 Generate the attributes (i. e. fields) of a `Field`. The methods defined for
 the abstract type depend on these attributes to be present.
 """
-macro add_Field_fields()
+macro add_Field_fields(T)
     return esc(:(
-    values::Array{T, 2};
-    dofnums::Array{FInt, 2};
-    is_fixed::Matrix{Bool};
-    fixed_values::Array{T, 2};;
+    data::Vector{Vector{FieldDOFData{$T}}};
     nfreedofs::FInt;
     )
     )
 end
 
 """
-    ndofs{F<:AbstractField}(self::T)
+    ndofs(self::AbstractField{T}) where {T}
 
-Dimension of the degree of freedom parameters (i. e. how many degrees of
-freedom per entity).
+How many degrees of freedom per entity?
+
+When the field stores no entities, zero (0) is returned.
 """
-ndofs(self::AbstractField)  = size(self.values, 2)
+ndofs(self::AbstractField{T}) where {T}  = length(self.data) > 0 ? length(self.data[1]) : 0
 
 """
-    nents{F<:AbstractField}(self::F)
+    nents(self::AbstractField{T}) where {T}
 
 Number of nodes associated with the field.
 """
-nents(self::AbstractField)  = size(self.values, 1)
+nents(self::AbstractField{T}) where {T} = length(self.data)
 
 """
-    copyto!(DEST::F,  SRC::F) where {F<:AbstractField}
+    copyto!(DEST::F,  SRC::F) where {T, F<:AbstractField{T}}
 
 Copy data from one field to another.
 """
-function copyto!(DEST::F,  SRC::F) where {F<:AbstractField}
-    copyto!(DEST.values, SRC.values)
-    copyto!(DEST.dofnums, SRC.dofnums)
-    copyto!(DEST.is_fixed, SRC.is_fixed)
-    copyto!(DEST.fixed_values, SRC.fixed_values)
+function copyto!(DEST::F,  SRC::F) where {T, F<:AbstractField{T}}
+    copyto!(DEST.data, SRC.data)
     DEST.nfreedofs = SRC.nfreedofs
     return  DEST
 end
 
 """
-    wipe!(self::AbstractField)
+    wipe!(self::AbstractField{T}) where {T}
 
 Wipe all the data from the field.
 
 This includes values, prescribed values, degree of freedom numbers, and "is
 fixed" flags. The number of free degrees of freedom is set to zero.
 """
-function wipe!(self::AbstractField)
-    Zer = zero(eltype(self.fixed_values[1]))
+function wipe!(self::AbstractField{T}) where {T}
+    z = zero(T)
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:nent
+        for j in 1:ndof
+            self.data[i][j].dofvalue = z
+            self.data[i][j].fixeddofvalue = z
+            self.data[i][j].dofnum = 0
+            self.data[i][j].isfixed = false
+        end
+    end
     self.nfreedofs = 0
-    fill!(self.dofnums, 0)
-    fill!(self.is_fixed, false)
-    fill!(self.values, Zer)
-    fill!(self.fixed_values, Zer)
     return self
 end
 
 """
-    gathersysvec{F<:AbstractField}(self::F)
+    gathersysvec(self::F) where {T, F<:AbstractField{T}}
 
 Gather values from the field for the whole system vector.
 """
-function gathersysvec(self::F) where {F<:AbstractField}
-    nents,dim = size(self.values)
-    vec = zeros(typeof(self.values[1,1]),self.nfreedofs,1)
-    for i = 1:nents
-        for j = 1:dim
-            en = self.dofnums[i,j]
+function gathersysvec(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    vec = zeros(T, self.nfreedofs)
+    for i in 1:nent
+        for j in 1:ndof
+            en = self.data[i][j].dofnum
             if (en > 0) && (en <= self.nfreedofs)
-                vec[en] = self.values[i,j]
+                vec[en] = self.data[i][j].dofvalue
             end
         end
     end
@@ -108,18 +125,20 @@ function gathersysvec(self::F) where {F<:AbstractField}
 end
 
 """
-    gathersysvec!(self::F, vec::FVec{T}) where {F<:AbstractField, T}
+    gathersysvec!(self::F, vec::FVec{T}) where {T, F<:AbstractField{T}}
 
 Gather values from the field for the whole system vector.
+
+The writing to `vec` occurs in-place.
 """
-function gathersysvec!(self::F, vec::FVec{T}) where {F<:AbstractField, T}
-    nents,dim = size(self.values)
+function gathersysvec!(self::F, vec::FVec{T}) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
     @assert length(vec) == self.nfreedofs
-    for i = 1:nents
-        for j = 1:dim
-            en = self.dofnums[i,j]
+    for i in 1:nent
+        for j in 1:ndof
+            en = self.data[i][j].dofnum
             if (en > 0) && (en <= self.nfreedofs)
-                vec[en] = self.values[i,j]
+                vec[en] = self.data[i][j].dofvalue
             end
         end
     end
@@ -127,8 +146,7 @@ function gathersysvec!(self::F, vec::FVec{T}) where {F<:AbstractField, T}
 end
 
 """
-    gathervalues_asvec!(self::AbstractField, dest::AbstractArray{T, 1},
-        conn::CC) where {CC, T}
+    gathervalues_asvec!(self::F, dest::AbstractArray{T, 1}, conn::CC) where {T, F<:AbstractField{T}, CC}
 
 Gather values from the field into a vector.
 
@@ -138,11 +156,12 @@ degrees of freedom,  then the next node and so on.
 `dest` = destination buffer: overwritten  inside,  must be preallocated
 in the correct size
 """
-function gathervalues_asvec!(self::AbstractField, dest::AbstractArray{T, 1}, conn::CC) where {CC, T}
+function gathervalues_asvec!(self::F, dest::AbstractArray{T, 1}, conn::CC) where {T, F<:AbstractField{T}, CC}
+    nent, ndof = nents(self), ndofs(self)
     en::FInt = 1;
-    for i = 1:length(conn)
-        for j = 1:size(self.values,2)
-            dest[en] = self.values[conn[i],j];
+    for i in 1:length(conn)
+        for j in 1:ndof
+            dest[en] = self.data[conn[i]][j].dofvalue;
             en = en + 1;
         end
     end
@@ -150,8 +169,7 @@ function gathervalues_asvec!(self::AbstractField, dest::AbstractArray{T, 1}, con
 end
 
 """
-    gathervalues_asmat!(self::AbstractField, dest::AbstractArray{T, 2},
-        conn::CC) where {CC, T}
+    gathervalues_asmat!(self::F, dest::AbstractArray{T, 2}, conn::CC) where {T, F<:AbstractField{T}, CC}
 
 Gather values from the field into a two-dimensional array.
 
@@ -162,18 +180,18 @@ row and so on.
 `dest` = destination buffer: overwritten  inside,  must be preallocated
 in the correct size
 """
-function gathervalues_asmat!(self::AbstractField, dest::AbstractArray{T, 2},    conn::CC) where {CC, T}
-    for i = 1:length(conn)
-        for j = 1:size(self.values,2)
-            dest[i, j] = self.values[conn[i], j];
+function gathervalues_asmat!(self::F, dest::AbstractArray{T, 2}, conn::CC) where {T, F<:AbstractField{T}, CC}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:length(conn)
+        for j in 1:ndof
+            dest[i, j] = self.data[conn[i]][j].dofvalue;
         end
     end
     return dest
 end
 
 """
-    gatherfixedvalues_asvec!(self::AbstractField, dest::AbstractArray{T, 1},
-        conn::CC) where {CC, T}
+    gatherfixedvalues_asvec!(self::F, dest::AbstractArray{T, 1}, conn::CC) where {T, F<:AbstractField{T}, CC}
 
 Gather FIXED values from the field into a vector.
 
@@ -184,14 +202,15 @@ is NOT fixed, the corresponding entry is  set to zero.
 `dest` = destination buffer: overwritten  inside,  must be preallocated
 in the correct size
 """
-function gatherfixedvalues_asvec!(self::AbstractField, dest::AbstractArray{T, 1},    conn::CC) where {CC, T}
+function gatherfixedvalues_asvec!(self::F, dest::AbstractArray{T, 1}, conn::CC) where {T, F<:AbstractField{T}, CC}
+    nent, ndof = nents(self), ndofs(self)
     en::FInt = 1;
-    for i = 1:length(conn)
-        for j = 1:size(self.fixed_values,2)
-            if self.is_fixed[conn[i],j] # free degree of freedom
-                dest[en] = self.fixed_values[conn[i], j];
+    for i in 1:length(conn)
+        for j in 1:ndof
+            if self.data[conn[i]][j].isfixed # fixed degree of freedom
+                dest[en] = self.data[conn[i]][j].fixeddofvalue
             else
-                dest[en] = 0.0
+                dest[en] = zero(T)
             end
             en = en + 1;
         end
@@ -200,8 +219,7 @@ function gatherfixedvalues_asvec!(self::AbstractField, dest::AbstractArray{T, 1}
 end
 
 """
-    gatherfixedvalues_asmat!(self::AbstractField, dest::AbstractArray{T, 2},
-        conn::CC) where {CC, T}
+    gatherfixedvalues_asmat!(self::F, dest::AbstractArray{T, 2}, conn::CC) where {T, F<:AbstractField{T}, CC}
 
 Gather FIXED values from the field into a two-dimensional array.
 
@@ -213,24 +231,34 @@ is NOT fixed, the corresponding entry is  set to zero.
 `dest` = destination buffer: overwritten  inside,  must be preallocated
 in the correct size
 """
-function gatherfixedvalues_asmat!(self::AbstractField, dest::AbstractArray{T, 2},    conn::CC) where {CC, T}
-    for i = 1:length(conn)
-        for j = 1:size(self.fixed_values,2)
-            if self.is_fixed[conn[i],j] # fixed degree of freedom
-                dest[i, j] = self.fixed_values[conn[i], j];
+function gatherfixedvalues_asmat!(self::F, dest::AbstractArray{T, 2}, conn::CC) where {T, F<:AbstractField{T}, CC}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:length(conn)
+        for j in 1:ndof
+            if self.data[conn[i]][j].isfixed # fixed degree of freedom
+                dest[i, j] = self.data[conn[i]][j].fixeddofvalue
             else
-                dest[i, j] = 0.0
+                dest[i, j] = zero(T)
             end
         end
     end
     return dest
 end
 
-function anyfixedvaluenz(self::AbstractField, conn::CC) where {CC}
-    for i = 1:length(conn)
-        for j = 1:size(self.fixed_values,2)
-            if self.is_fixed[conn[i],j] # free degree of freedom
-                if  abs(self.fixed_values[conn[i], j]) > 0.0
+"""
+    anyfixedvaluenz(self::F, conn::CC) where {T, F<:AbstractField{T}, CC}
+
+Is any degree of freedom value fixed (prescribed) and nonzero?
+
+Degrees of freedom for all entities listed in the `conn` argument are checked.
+Returns a Boolean.
+"""
+function anyfixedvaluenz(self::F, conn::CC) where {T, F<:AbstractField{T}, CC}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:length(conn)
+        for j in 1:ndof
+            if self.data[conn[i]][j].isfixed # fixed degree of freedom
+                if  abs(self.data[conn[i]][j].fixeddofvalue) > zero(T)
                     return true
                 end
             end
@@ -240,15 +268,18 @@ function anyfixedvaluenz(self::AbstractField, conn::CC) where {CC}
 end
 
 """
-    gatherdofnums!(self::AbstractField, dest::A, conn::CC) where {A, CC}
+    gatherdofnums!(self::F, dest::A, conn::CC) where {T, F<:AbstractField{T}, A, CC}
 
-Gather dofnums from the field.
+Gather degree of freedom numbers from the field.
+
+Degrees of freedom for all entities listed in the `conn` argument are collected.
 """
-function gatherdofnums!(self::AbstractField, dest::A, conn::CC) where {A, CC}
+function gatherdofnums!(self::F, dest::A, conn::CC) where {T, F<:AbstractField{T}, A, CC}
+    nent, ndof = nents(self), ndofs(self)
     en::FInt = 1;
-    for i = 1:length(conn)
-        for j = 1:size(self.dofnums,2)
-            dest[en] = self.dofnums[conn[i],j];
+    for i in 1:length(conn)
+        for j in 1:ndof
+            dest[en] = self.data[conn[i]][j].dofnum;
             en = en+1;
         end
     end
@@ -256,26 +287,25 @@ function gatherdofnums!(self::AbstractField, dest::A, conn::CC) where {A, CC}
 end
 
 """
-    numberdofs!(self::AbstractField)
+    numberdofs!(self::F) where {T, F<:AbstractField{T}}
 
 Number the degrees of freedom.
 
 The free components in the field are numbered consecutively. No effort is
 made to optimize the numbering in any way. If you'd like to optimize the
-numbering of the degrees of freedom, use the above form that sets the
+numbering of the degrees of freedom, use the form that sets the
 permutation of the degrees of freedom, or the permutation of the nodes.
 """
-function numberdofs!(self::AbstractField)
-    fixed_dofnum::FInt = 0
-    nents,dim = size(self.values)
+function numberdofs!(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
     self.nfreedofs::FInt =0
-    for i=1:nents
-        for j=1:dim
-            if !self.is_fixed[i,j] # free degree of freedom
+    for i in 1:nent
+        for j in 1:ndof
+            if !self.data[i][j].isfixed # free degree of freedom
                 self.nfreedofs = self.nfreedofs + 1
-                self.dofnums[i,j] = self.nfreedofs
+                self.data[i][j].dofnum = self.nfreedofs
             else # fixed degree of freedom: no equation
-                self.dofnums[i,j] = fixed_dofnum
+                self.data[i][j].dofnum = fixed_dofnum
             end
         end
     end
@@ -283,13 +313,43 @@ function numberdofs!(self::AbstractField)
 end
 
 """
-    setebc!(self::AbstractField, fenids::FIntVec, is_fixed::Bool, comp::FInt,
-      val::FVec{T}) where {T<:Number}
+    resetdofnums!(self::F) where {T, F<:AbstractField{T}}
+
+Set all degree of freedom numbers to an invalid number.
+"""
+function resetdofnums!(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    if self.nfreedofs != 0 # We assume that if this is zero, the zeroing out doesn't need to happen.
+        for i in 1:nent
+            for j in 1:ndof
+                self.data[i][j].dofnum = fixed_dofnum
+            end
+        end
+    end
+    self.nfreedofs = 0
+end
+
+"""
+    resetfixeddofvalues!(self::F) where {T, F<:AbstractField{T}}
+
+Set the fixed values for all degree of freedom numbers to zero.
+"""
+function resetfixeddofvalues!(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:nent
+        for j in 1:ndof
+            self.data[i][j].fixeddofvalue = zero(T)
+        end
+    end
+end
+
+"""
+    setebc!(self::F, entids::FIntVec, isfixed::Bool, comp::FInt, val::FVec{T}) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
-`fenids`         - array of N node identifiers
-`is_fixed` = scaler Boolean: are the degrees of freedom being fixed (true)
+`entids`         - array of N entity identifiers
+`isfixed` = scaler Boolean: are the degrees of freedom being fixed (true)
              or released (false),
 `comp` = integer, which  degree of freedom (component),
 `val` = array of N values of type T
@@ -300,31 +360,30 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenids::FIntVec, is_fixed::Bool, comp::FInt,    val::FVec{T}) where {T<:Number}
-    @assert comp <= size(self.values,2) "Requested  nonexistent  degree of freedom"
-    @assert maximum(fenids) <= size(self.values,1) "Requested nonexistent node"
-    @assert size(fenids) == size(val) "Arrays of mismatched sizes"
-    for  j = 1:length(fenids)
-        self.is_fixed[fenids[j],comp] = is_fixed;
-        if self.is_fixed[fenids[j],comp]
-            self.fixed_values[fenids[j],comp] = val[j];
+function setebc!(self::F, entids::FIntVec, isfixed::Bool, comp::FInt, val::FVec{T}) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    @assert 1 <= comp <= ndof "Requested  nonexistent  degree of freedom"
+    @assert maximum(entids) <= nent "Requested nonexistent entity"
+    @assert size(entids) == size(val) "Arrays of mismatched sizes"
+    for  j in 1:length(entids)
+        self.data[entids[j]][comp].isfixed = isfixed;
+        if self.data[entids[j]][comp].isfixed
+            self.data[entids[j]][comp].fixeddofvalue = val[j];
         else
-            self.fixed_values[fenids[j],comp] = zero(T)
+            self.data[entids[j]][comp].fixeddofvalue = zero(T)
         end
     end
-    self.nfreedofs = 0
-    fill!(self.dofnums, 0)
+    resetdofnums!(self)
     return  self
 end
 
 """
-    setebc!(self::AbstractField, fenids::FIntVec, is_fixed::Bool, comp::FInt,
-      val::T) where {T<:Number}
+    setebc!(self::F, entids::FIntVec, isfixed::Bool, comp::FInt, val::T) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
-`fenids`         - array of N node identifiers
-`is_fixed` = scaler Boolean: are the degrees of freedom being fixed (true)
+`entids`         - array of N node identifiers
+`isfixed` = scaler Boolean: are the degrees of freedom being fixed (true)
              or released (false),
 `comp` = integer, which  degree of freedom (component),
 `val` = scalar of type T
@@ -335,30 +394,28 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenids::FIntVec, is_fixed::Bool, comp::FInt,    val::T) where {T<:Number}
-    @assert (comp >= 1 && comp <= size(self.values,2)) "Requested  nonexistent  degree of freedom"
-    @assert maximum(fenids) <= size(self.values,1) "Requested nonexistent node"
-    @assert minimum(fenids) >= 1 "Requested nonexistent node"
-    for  j = 1:length(fenids)
-        self.is_fixed[fenids[j],comp] = is_fixed;
-        if self.is_fixed[fenids[j],comp]
-            self.fixed_values[fenids[j],comp] = val;
+function setebc!(self::F, entids::FIntVec, isfixed::Bool, comp::FInt, val::T) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    @assert 1 <= comp <= ndof "Requested  nonexistent  degree of freedom"
+    @assert maximum(entids) <= nent "Requested nonexistent entity"
+    for  j in 1:length(entids)
+        self.data[entids[j]][comp].isfixed = isfixed;
+        if self.data[entids[j]][comp].isfixed
+            self.data[entids[j]][comp].fixeddofvalue = val;
         else
-            self.fixed_values[fenids[j],comp] = zero(T)
+            self.data[entids[j]][comp].fixeddofvalue = zero(T)
         end
     end
-    self.nfreedofs = 0
-    fill!(self.dofnums, 0)
+    resetdofnums!(self)
     return  self
 end
 
 """
-    setebc!(self::AbstractField, fenids::FIntVec, comp::FInt,
-      val::FVec{T}) where {T<:Number}
+    setebc!(self::F, entids::FIntVec, comp::FInt, val::FVec{T}) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
-`fenids`         - array of N node identifiers
+`entids`         - array of N node identifiers
 `comp` = integer, which  degree of freedom (component),
 `val` = array of N values of type T
 
@@ -368,18 +425,17 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenids::FIntVec, comp::FInt, val::FVec{T}) where {T<:Number}
-    return setebc!(self, fenids, true, comp, val)
+function setebc!(self::F, entids::FIntVec, comp::FInt, val::FVec{T}) where {T, F<:AbstractField{T}}
+    return setebc!(self, entids, true, comp, val)
 end
 
 
 """
-    setebc!(self::AbstractField, fenids::FIntVec, comp::FInt;
-      val::T=0.0) where {T<:Number}
+    setebc!(self::F, entids::FIntVec, comp::FInt; val::T=0.0) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
-`fenids`         - array of N node identifiers
+`entids`         - array of N node identifiers
 `comp` = integer, which  degree of freedom (component),
 `val` = scalar of type T
 
@@ -389,17 +445,17 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenids::FIntVec, comp::FInt; val::T=0.0) where {T<:Number}
-    return setebc!(self, fenids, true, comp, val)
+function setebc!(self::F, entids::FIntVec, comp::FInt; val::T=zero(T)) where {T, F<:AbstractField{T}}
+    return setebc!(self, entids, true, comp, val)
 end
 
 """
-    setebc!(self::AbstractField, fenids::FIntVec, is_fixed::Bool, comp::FInt;
-      val::T=0.0) where {T<:Number}
+    setebc!(self::F, entids::FIntVec, isfixed::Bool, comp::FInt; val::T=zero(T)) where {T, F<:AbstractField{T}}
+    j = comp
 
 Set the EBCs (essential boundary conditions).
 
-`fenids`         - array of N node identifiers
+`entids`         - array of N node identifiers
 `comp` = integer, which  degree of freedom (component),
 `val` = scalar of type T
 
@@ -409,21 +465,21 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenids::FIntVec, is_fixed::Bool, comp::FInt;    val::T=0.0) where {T<:Number}
+function setebc!(self::F, entids::FIntVec, isfixed::Bool, comp::FInt; val::T=zero(T)) where {T, F<:AbstractField{T}}
     j = comp
     @assert (j >= 1) && (j <= ndofs(self))
-    setebc!(self, fenids, is_fixed, j, val)
+    setebc!(self, entids, isfixed, j, val)
     return self
 end
 
 """
-    setebc!(self::AbstractField, fenids::FIntVec)
+    setebc!(self::F, entids::FIntVec) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
 Suppress all degrees of freedom at the given nodes.
 
-`fenids`         - array of N node identifiers
+`entids`         - array of N node identifiers
 
 Note:  Any call to setebc!() potentially changes the current assignment
 which degrees of freedom are free and which are fixed
@@ -431,16 +487,17 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenids::FIntVec)
-    Zer = zero(eltype(self.fixed_values[1]))
-    for comp = 1:size(self.values, 2)
-        setebc!(self, fenids, true, comp, Zer)
+function setebc!(self::F, entids::FIntVec) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    Zer = zero(T)
+    for comp in 1:ndof
+        setebc!(self, entids, true, comp, Zer)
     end
     return self
 end
 
 """
-    setebc!(self::AbstractField, fenid::FInt)
+    setebc!(self::F, fenid::FInt) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
@@ -454,16 +511,17 @@ and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
 `nfreedofs = 0`; and  `dofnums=0`.
 """
-function setebc!(self::AbstractField, fenid::FInt)
-    Zer = zero(eltype(self.fixed_values[1]))
-    for comp = 1:size(self.values, 2)
+function setebc!(self::F, fenid::FInt) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    Zer = zero(T)
+    for comp in 1:ndof
         setebc!(self, [fenid], true, comp, Zer)
     end
     return self
 end
 
 """
-    setebc!(self::AbstractField)
+    setebc!(self::F) where {T, F<:AbstractField{T}}
 
 Set the EBCs (essential boundary conditions).
 
@@ -473,27 +531,27 @@ Note:  Any call to setebc!() potentially changes the current assignment
 which degrees of freedom are free and which are fixed
 and therefore is presumed to invalidate the
 current degree-of-freedom numbering. In such a case this method sets
-`nfreedofs = 0`; and  `dofnums=0`.
+`nfreedofs = 0`; and sets all degrees of freedom to an invalid number.
 """
-function setebc!(self::AbstractField)
-    self.nfreedofs = 0
-    fill!(self.dofnums, 0)
-    fill!(self.is_fixed, false)
-    fill!(self.fixed_values, zero(eltype(self.fixed_values[1])))
+function setebc!(self::F) where {T, F<:AbstractField{T}}
+    resetdofnums!(self)
     return  self
 end
 
 """
-    applyebc!(self::AbstractField)
+    applyebc!(self::F) where {T, F<:AbstractField{T}}
 
 Apply EBCs (essential boundary conditions).
+
+The prescribed values of the degrees of freedom are copied to the degree of
+freedom values for fixed (prescribed) degrees of freedom.
 """
-function applyebc!(self::AbstractField)
-    nents,dim = size(self.values);
-    for i = 1:nents
-        for j = 1:dim
-            if self.is_fixed[i,j]
-                self.values[i,j] = self.fixed_values[i,j];
+function applyebc!(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:nent
+        for j in 1:ndof
+            if self.data[i][j].isfixed
+                self.data[i][j].dofvalue = self.data[i][j].fixeddofvalue
             end
         end
     end
@@ -501,17 +559,17 @@ function applyebc!(self::AbstractField)
 end
 
 """
-    scattersysvec!(self::AbstractField, vec::FVec{T}) where {T<:Number}
+    scattersysvec!(self::F, vec::FVec{T}) where {T, F<:AbstractField{T}}
 
 Scatter values to the field from a system vector.
 """
-function scattersysvec!(self::AbstractField, vec::FVec{T}) where {T<:Number}
-    nents,dim = size(self.values);
-    for i = 1:nents
-        for j = 1:dim
-            dn = self.dofnums[i,j];
+function scattersysvec!(self::F, vec::FVec{T}) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:nent
+        for j in 1:ndof
+            dn = self.data[i][j].dofnum
             if (dn > 0) && (dn <= self.nfreedofs)
-                self.values[i,j] = vec[dn];
+                self.data[i][j].dofvalue = vec[dn];
             end
         end
     end
@@ -519,17 +577,17 @@ function scattersysvec!(self::AbstractField, vec::FVec{T}) where {T<:Number}
 end
 
 """
-    incrscattersysvec!(self::AbstractField, vec::FVec{T}) where {T<:Number}
+    incrscattersysvec!(self::F, vec::FVec{T}) where {T, F<:AbstractField{T}}
 
 Increment values of the field by scattering a system vector.
 """
-function incrscattersysvec!(self::AbstractField, vec::FVec{T}) where {T<:Number}
-    nents,dim = size(self.values);
-    for i = 1:nents
-        for j = 1:dim
-            dn = self.dofnums[i,j];
+function incrscattersysvec!(self::F, vec::FVec{T}) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:nent
+        for j in 1:ndof
+            dn = self.data[i][j].dofnum
             if (dn > 0) && (dn <= self.nfreedofs)
-                self.values[i,j] += vec[dn];
+                self.data[i][j].dofvalue += vec[dn];
             end
         end
     end
@@ -537,30 +595,183 @@ function incrscattersysvec!(self::AbstractField, vec::FVec{T}) where {T<:Number}
 end
 
 """
-    prescribeddofs(uebc, u)
+    prescribeddofs(uebc::F, u::F) where {T, F<:AbstractField{T}}
 
-Find which degrees of freedom are prescribed.
-`uebc` = field which defines the constraints (is the dof fixed and to which value),
+Find which degrees of freedom are prescribed and to which values.
+
+`uebc` = field which defines the constraints (is the dof fixed and to which value?),
 `u` = field which does not have the constraints applied, and serves as the source of equation numbers,
 `uebc` and `u` may be one and the same field.
-
 """
-function prescribeddofs(uebc::AbstractField, u::AbstractField)
+function prescribeddofs(uebc::F, u::F) where {T, F<:AbstractField{T}}
+    @assert nents(uebc) == nents(u)
+    @assert ndofs(uebc) == ndofs(u)
 	dofnums = FInt[]
 	prescribedvalues = eltype(uebc.values)[]
-	nents, dim = size(uebc.values)
-	@assert size(uebc.values) == size(u.values)
-	for i = 1:nents
-		for j = 1:dim
-			if uebc.is_fixed[i,j]
-			    push!(prescribedvalues, uebc.fixed_values[i,j]);
-			    dn = u.dofnums[i,j];
+	nent, ndof = nents(uebc), ndofs(uebc)
+	for i in 1:nent
+		for j in 1:ndof
+			if uebc.data[i][j].isfixed
+			    push!(prescribedvalues, uebc.data[i][j].fixeddofvalue);
+			    dn = u.data[i][j].dofnum
 			    @assert  (dn > 0) && (dn <= u.nfreedofs)
 			    push!(dofnums, dn)
 			end
 		end
 	end
 	return dofnums, prescribedvalues
+end
+
+"""
+    dofvaluesasarray(self::F) where {T, F<:AbstractField{T}}
+
+Return the degree of freedom values as an array.
+
+Return the degree of freedom values as a matrix, where the number of rows
+matches the number of entities in the field.
+"""
+function dofvaluesasarray(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    values = fill(zero(T), nent, ndof)
+    for i in 1:nent
+        for j in 1:ndof
+            values[i, j] = self.data[i][j].dofvalue
+        end
+    end
+    return values
+end
+
+"""
+    fixeddofvaluesasarray(self::F) where {T, F<:AbstractField{T}}
+
+Return the fixed (prescribed) degree of freedom values as an array.
+
+Return the fixed (prescribed) as a matrix, where the number of rows
+matches the number of entities in the field.
+"""
+function fixeddofvaluesasarray(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    values = fill(zero(T), nent, ndof)
+    for i in 1:nent
+        for j in 1:ndof
+            values[i, j] = self.data[i][j].fixeddofvalue
+        end
+    end
+    return values
+end
+
+"""
+    isfixedasarray(self::F) where {T, F<:AbstractField{T}}
+
+Return the is-fixed (prescribed) Boolean flags as an array.
+
+Return the Boolean flags whether a degree of freedom is fixed or free as a
+matrix, where the number of rows matches the number of entities in the field.
+"""
+function isfixedasarray(self::F) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    values = fill(false, nent, ndof)
+    for i in 1:nent
+        for j in 1:ndof
+            values[i, j] = self.data[i][j].isfixed
+        end
+    end
+    return values
+end
+"""
+    setdofvalue!(self::F, ent, dof, val::T) where {T, F<:AbstractField{T}}
+
+Set the value of the degree of freedom at a given entity.
+"""
+function setdofvalue!(self::F, ent, dof, val::T) where {T, F<:AbstractField{T}}
+    self.data[ent][dof].dofvalue = val
+    return self
+end
+
+"""
+    setdofvalues!(self::F, val::T) where {T, F<:AbstractField{T}}
+
+Set the value of all the degree of freedom at all entities.
+"""
+function setdofvalues!(self::F, val::T) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for i in 1:nent
+        for j in 1:ndof
+            setdofvalue!(self, i, j, val)
+        end
+    end
+    return self
+end
+
+"""
+    setdofvalues!(self::F, ent, vals) where {T, F<:AbstractField{T}}
+
+Set the value of all the degree of freedom of a given entity.
+"""
+function setdofvalues!(self::F, ent, vals) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for j in 1:ndof
+        setdofvalue!(self, ent, j, vals[j])
+    end
+    return self
+end
+
+"""
+    getdofvalue(self::F, ent, dof) where {T, F<:AbstractField{T}}
+
+Get the value of the degree of freedom at a given entity.
+"""
+function getdofvalue(self::F, ent, dof) where {T, F<:AbstractField{T}}
+    return self.data[ent][dof].dofvalue
+end
+
+"""
+    getdofnum(self::F, ent, dof) where {T, F<:AbstractField{T}}
+
+Get the degree of freedom number at a given entity and for a given degree of freedom.
+"""
+function getdofnum(self::F, ent, dof) where {T, F<:AbstractField{T}}
+    return self.data[ent][dof].dofnum
+end
+
+"""
+    getdofvalues!(self::F, vals, ent) where {T, F<:AbstractField{T}}
+
+Get the values of all the degrees of freedom at a given entity.
+"""
+function getdofvalues!(self::F, vals, ent) where {T, F<:AbstractField{T}}
+    nent, ndof = nents(self), ndofs(self)
+    for j in 1:ndof
+        vals[j] = getdofvalue(self, ent, j)
+    end
+    return vals
+end
+
+"""
+    getdofsvector(self::F, ent) where {T, F<:AbstractField{T}}
+
+Provide access to the vector for all the degrees of freedom for a given entity.
+"""
+function getdofsvector(self::F, ent) where {T, F<:AbstractField{T}}
+    return self.data[ent]
+end
+
+"""
+    getdofvalue(v::Vector{FieldDOFData{T}}, dof) where {T}
+
+Get the value of a degree of freedom from the vector of dofs.
+"""
+function getdofvalue(v::Vector{FieldDOFData{T}}, dof) where {T}
+    return v[dof].dofvalue
+end
+
+"""
+    getdofnum(v::Vector{FieldDOFData{T}}, dof) where {T}
+
+Get the degree of freedom number from the vector of dofs.
+"""
+function getdofnum(v::Vector{FieldDOFData{T}}, dof) where {T}
+    return v[dof].dofnum
 end
 
 end
