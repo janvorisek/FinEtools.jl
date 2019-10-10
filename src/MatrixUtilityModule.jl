@@ -6,27 +6,28 @@ Module for general utility matrix product functions.
 module MatrixUtilityModule
 
 using ..FTypesModule: FInt, FFlt, FCplxFlt, FFltVec, FIntVec, FFltMat, FIntMat, FMat, FVec, FDataDict
+import ..FieldModule: ndofs, nents, getdofvalue, getdofvalues!, getdofsvector
 
 """
-    loc!(loc::FFltMat, X::FFltMat, conn::C, N::FFltMat) where {C}
+    loc!(loc::FFltMat, xf::F, conn::C, N::FFltMat) where {F, C}
 
-Compute the location of the quadrature point.  
+Compute the location of the quadrature point.
 
-Arguments: 
+Arguments:
 `loc` = matrix of coordinates, overwritten  inside the function
-`X` = matrix of the node coordinates from the entire mesh, index 
-    with the connectivity `conn`
+`xf` = geometry field from the entire mesh
 `conn` = connectivity, indexes the matrix `X`
 `N` = matrix of basis function values
 """
-function loc!(loc::FFltMat, X::FFltMat, conn::C, N::FFltMat) where {C}
+function loc!(loc::FFltMat, xf::F, conn::C, N::FFltMat) where {F, C}
     n = size(N, 1)
-    @inbounds for j = 1:size(loc, 2)
-        la = 0.0
-        @inbounds for k = 1:n
-            la += N[k] * X[conn[k], j]
+    fill!(loc, zero(FFlt))
+    @inbounds for k in 1:n
+        v = getdofsvector(xf, conn[k])
+        Nk = N[k]
+        @inbounds for j in 1:size(loc, 2)
+            loc[j] += Nk * getdofvalue(v, j)
         end
-        loc[j] = la
     end
     return loc
 end
@@ -34,45 +35,44 @@ end
 """
     jac!(J::FFltMat, X::FFltMat, conn::C, gradNparams::FFltMat) where {C}
 
-Compute the Jacobian matrix at the quadrature point.  
+Compute the Jacobian matrix at the quadrature point.
 
-Arguments: 
+Arguments:
 `J` = Jacobian matrix, overwritten  inside the function
-`X` = matrix of the node coordinates from the entire mesh, index 
-    with the connectivity `conn`
+`xf` = geometry field from the entire mesh
 `conn` = connectivity, indexes the matrix `X`
 `gradNparams` = matrix of basis function gradients
 """
-function jac!(J::FFltMat, X::FFltMat, conn::C, gradNparams::FFltMat) where {C}
+function jac!(J::FFltMat, xf::F, conn::C, gradNparams::FFltMat) where {F, C}
     n = size(gradNparams, 1)
-    @inbounds for j = 1:size(J, 2)
-        @inbounds for i = 1:size(J, 1)
-            Ja = 0.0
-            @inbounds for k = 1:n
-                Ja += X[conn[k], i] * gradNparams[k, j]
+    fill!(J, zero(FFlt))
+    @inbounds for k in 1:n
+        v = getdofsvector(xf, conn[k])
+        @inbounds for j in 1:size(J, 2)
+            gNpkj = gradNparams[k, j]
+            @inbounds for i in 1:size(J, 1)
+                J[i, j] += getdofvalue(v, i) * gNpkj
             end
-            J[i, j] = Ja
         end
     end
     return J
 end
 
 """
-    locjac!(loc::FFltMat, J::FFltMat, X::FFltMat, conn::C, N::FFltMat, gradNparams::FFltMat) where {C}
+    locjac!(loc::FFltMat, J::FFltMat, xf::F, conn::C, N::FFltMat, gradNparams::FFltMat) where {F, C}
 
-Compute location and Jacobian matrix at the quadrature point.  
+Compute location and Jacobian matrix at the quadrature point.
 
-Arguments: 
+Arguments:
 `loc` = matrix of coordinates, overwritten  inside the function
 `J` = Jacobian matrix, overwritten  inside the function
-`X` = matrix of the node coordinates from the entire mesh, index 
-    with the connectivity `conn`
+`xf` = geometry field from the entire mesh
 `conn` = connectivity, indexes the matrix `X`
 `N` = matrix of basis function values
 `gradNparams` = matrix of basis function gradients
 """
-function locjac!(loc::FFltMat, J::FFltMat, X::FFltMat, conn::C, N::FFltMat, gradNparams::FFltMat) where {C}
-    return loc!(loc, X, conn, N), jac!(J, X, conn, gradNparams)
+function locjac!(loc::FFltMat, J::FFltMat, xf::F, conn::C, N::FFltMat, gradNparams::FFltMat) where {F, C}
+    return loc!(loc, xf, conn, N), jac!(J, xf, conn, gradNparams)
 end
 
 """
@@ -86,7 +86,7 @@ The argument `mult` is a scalar.
 The matrix `Ke` is assumed to be suitably initialized.
 
 The matrix `Ke` is modified.  The matrix `gradN` is not modified
-inside this function. 
+inside this function.
 """
 function add_mggt_ut_only!(Ke::FFltMat, gradN::FFltMat, mult::FFlt)
     Kedim = size(Ke, 1)
@@ -115,9 +115,9 @@ Add the product `gradN*kappa_bar*gradNT*(Jac*w[j])` to the elementwise matrix `K
 
 The matrix `Ke` is assumed to be suitably initialized.
 
-Upon return,  the matrix `Ke` is updated.  The scratch buffer `kappa_bargradNT` 
-is overwritten during each call of this function. The matrices `gradN` and 
-`kappa_bar` are not modified inside this function. 
+Upon return,  the matrix `Ke` is updated.  The scratch buffer `kappa_bargradNT`
+is overwritten during each call of this function. The matrices `gradN` and
+`kappa_bar` are not modified inside this function.
 """
 function add_gkgt_ut_only!(Ke::FFltMat, gradN::FFltMat, Jac_w::FFlt,
         kappa_bar::FFltMat, kappa_bargradNT::FFltMat)
@@ -154,8 +154,8 @@ end
 
 Complete the lower triangle of the elementwise matrix `Ke`.
 
-The matrix `Ke` is modified  inside this function. The 
-upper-triangle  entries  are copied  across the diagonal 
+The matrix `Ke` is modified  inside this function. The
+upper-triangle  entries  are copied  across the diagonal
 to the lower triangle.
 """
 function complete_lt!(Ke::FFltMat)
@@ -221,7 +221,7 @@ Add the product  `Nn*(Nn'*(coeff*(Jac*w(j)))`, to the elementwise matrix `Ke`.
 The matrix `Ke` is assumed to be suitably initialized.
 
 The matrix `Ke` is modified.  The matrix `Nn` is not modified
-inside this function. 
+inside this function.
 """
 function add_nnt_ut_only!(Ke::FMat{T}, N::FFltMat, Jac_w_coeff::T) where {T<:Number}
     Kedim = size(N, 1)
@@ -247,7 +247,7 @@ Add product of the strain-displacement matrix transpose times the stress vector.
 
 Note:  the coefficient `Jac_w_coeff` will be typically  NEGATIVE.
 
-The argument `elvec` needs to be suitably  initialized before the first call 
+The argument `elvec` needs to be suitably  initialized before the first call
 (filled with zeros, for instance),  and it is updated upon return.
 The arguments `B`, `sig` are not modified.
 """
@@ -267,7 +267,7 @@ end
 """
     adjugate3!(B, A)
 
-Compute the adjugate matrix of `A`.  
+Compute the adjugate matrix of `A`.
 """
 function adjugate3!(B, A)
     # % A = rand(3)
@@ -276,11 +276,11 @@ function adjugate3!(B, A)
     B[1,1] =(A[5]*A[9]-A[8]*A[6]);
     B[1,2] =-(A[4]*A[9]-A[7]*A[6]);
     B[1,3] =(A[4]*A[8]-A[7]*A[5]);
-    
+
     B[2,1] =-(A[2]*A[9]-A[8]*A[3]);
     B[2,2] =(A[1]*A[9]-A[7]*A[3]);
     B[2,3] =-(A[1]*A[8]-A[7]*A[2]);
-    
+
     B[3,1] =(A[2]*A[6]-A[5]*A[3]);
     B[3,2] =-(A[1]*A[6]-A[4]*A[3]);
     B[3,3] =(A[1]*A[5]-A[4]*A[2]);

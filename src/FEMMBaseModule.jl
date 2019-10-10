@@ -14,7 +14,7 @@ import ..FENodeSetModule: FENodeSet
 import ..FESetModule: AbstractFESet, manifdim, nodesperelem, subset, map2parametric, inparametric, centroidparametric, bfun
 import ..IntegDomainModule: IntegDomain, integrationdata, Jacobianmdim, Jacobianvolume
 import ..CSysModule: CSys
-import ..FieldModule: ndofs, nents, gatherdofnums!, gathervalues_asmat! 
+import ..FieldModule: ndofs, nents, gatherdofnums!, gathervalues_asmat!, setdofvalues!, getdofvalue, getdofvalues!, dofvaluesasarray, setdofvalue!
 import ..NodalFieldModule: NodalField, nnodes
 import ..ElementalFieldModule: ElementalField, nelems
 import ..ForceIntensityModule: ForceIntensity, updateforce!
@@ -44,7 +44,7 @@ end
 """
     FEMMBase(integdomain::IntegDomain{S, F}) where {S<:AbstractFESet, F<:Function}
 
-Construct with the default orientation matrix (identity).  
+Construct with the default orientation matrix (identity).
 """
 function FEMMBase(integdomain::IntegDomain{S, F}) where {S<:AbstractFESet, F<:Function}
     return FEMMBase(integdomain, CSys(manifdim(integdomain.fes)))
@@ -59,10 +59,10 @@ There may be operations that could benefit from pre-computations
 that involve a geometry field. If so, associating the geometry
 field gives the FEMM a chance to save on repeated computations.
 
-Geometry field is normally passed into any routine that evaluates some 
-forms (integrals) over the mesh.  Whenever the geometry passed into a 
-routine is not consistent with the one for which `associategeometry!()` 
-was called before, `associategeometry!()` needs to be called with 
+Geometry field is normally passed into any routine that evaluates some
+forms (integrals) over the mesh.  Whenever the geometry passed into a
+routine is not consistent with the one for which `associategeometry!()`
+was called before, `associategeometry!()` needs to be called with
 the new geometry field.
 """
 function associategeometry!(self::AbstractFEMM,  geom::NodalField{FFlt})
@@ -72,7 +72,7 @@ end
 """
     inspectintegpoints(self::FEMM, geom::NodalField{FFlt},  u::NodalField{T}, dT::NodalField{FFlt}, felist::FIntVec, inspector::F,  idat, quantity=:Cauchy; context...) where {FEMM<:AbstractFEMM, T<:Number, F<:Function}
 
-Inspect integration points.  
+Inspect integration points.
 """
 function inspectintegpoints(self::FEMM, geom::NodalField{FFlt}, felist::FIntVec, inspector::F,  idat, quantity=:Cauchy; context...) where {FEMM<:AbstractFEMM, T<:Number, F<:Function}
     return idat # default is no-op
@@ -85,10 +85,10 @@ end
 
 Integrate a nodal-field function over the discrete manifold.
 
-`afield` = NODAL field to be supply the values 
+`afield` = NODAL field to be supply the values
 `fh` = function taking position and the field value as arguments, returning value of type `R`.
 
-Returns value of type `R`, which is initialized by `initial`.    
+Returns value of type `R`, which is initialized by `initial`.
 """
 function integratefieldfunction(self::AbstractFEMM, geom::NodalField{FFlt},  afield::FL, fh::F,  initial::R;
     m::FInt=-1) where {T<:Number, FL<:NodalField{T}, R, F<:Function}
@@ -114,7 +114,7 @@ function integratefieldfunction(self::AbstractFEMM, geom::NodalField{FFlt},  afi
     for i=1:count(fes) #Now loop over all fes in the block
         gathervalues_asmat!(afield, a, fes.conn[i]);# retrieve element dofs
         for j = 1:npts #Loop over all integration points
-            locjac!(loc, J, geom.values, fes.conn[i], Ns[j], gradNparams[j]) 
+            locjac!(loc, J, geom, fes.conn[i], Ns[j], gradNparams[j])
             my_At_mul_B!(val, Ns[j], a);# Field value at the quadrature point
             Jac = Jacobianmdim(self.integdomain, J, loc, fes.conn[i],  Ns[j], m);
             result = result + fh(loc,val)*Jac*w[j];
@@ -130,12 +130,12 @@ end
 
 Integrate a elemental-field function over the discrete manifold.
 
-`afield` = ELEMENTAL field to be supply the values 
+`afield` = ELEMENTAL field to be supply the values
 `fh` = function taking position and the field value as arguments, returning value of type `R`.
 
-Returns value of type `R`, which is initialized by `initial`. 
-""" 
-function integratefieldfunction(self::AbstractFEMM, geom::NodalField{FFlt},  afield::FL, fh::F,  initial::R; 
+Returns value of type `R`, which is initialized by `initial`.
+"""
+function integratefieldfunction(self::AbstractFEMM, geom::NodalField{FFlt},  afield::FL, fh::F,  initial::R;
     m::FInt=-1) where {T<:Number, FL<:ElementalField{T}, R, F<:Function}
     fes = self.integdomain.fes  # finite elements
     # Constants
@@ -158,7 +158,7 @@ function integratefieldfunction(self::AbstractFEMM, geom::NodalField{FFlt},  afi
     for i=1:count(fes) #Now loop over all fes in the block
         gathervalues_asmat!(afield, a, [i]);# retrieve element dofs
         for j = 1:npts #Loop over all integration points
-            locjac!(loc, J, geom.values, fes.conn[i], Ns[j], gradNparams[j]) 
+            locjac!(loc, J, geom, fes.conn[i], Ns[j], gradNparams[j])
             Jac = Jacobianmdim(self.integdomain, J, loc, fes.conn[i],  Ns[j], m);
             result = result + fh(loc, a)*Jac*w[j];
         end
@@ -214,7 +214,7 @@ function integratefunction(self::AbstractFEMM, geom::NodalField{FFlt}, fh::F, m:
     result = 0.0;# Initialize the result
     for i = 1:count(fes)  # Now loop over all fes in the set
         for j=1:npts #Loop over all integration points
-            locjac!(loc, J, geom.values, fes.conn[i], Ns[j], gradNparams[j]) 
+            locjac!(loc, J, geom, fes.conn[i], Ns[j], gradNparams[j])
             Jac = Jacobianmdim(self.integdomain, J, loc, fes.conn[i],  Ns[j], m);
             result = result + fh(vec(loc))*Jac*w[j];
         end
@@ -244,7 +244,9 @@ Transfer a nodal field from a coarse mesh to a finer one.
 Nodal field `ff` transferred to the fine mesh is output.
 """
 function transferfield!(ff::F, fensf::FENodeSet, fesf::AbstractFESet, fc::F, fensc::FENodeSet, fesc::AbstractFESet, geometricaltolerance::FFlt; parametrictolerance::FFlt = 0.01)  where {T<:Number, F<:NodalField{T}}
-    fill!(ff.values, Inf) # the "infinity" value indicates a missed node
+    setdofvalues!(ff, Inf) # the "infinity" value indicates a missed node
+    vals = fill(zero(T), ndofs(ff))
+    vals1 = fill(zero(T), ndofs(ff))
     @assert count(fensf) == nents(ff)
     parametrictol = 0.01
     nodebox = initbox!([], vec(fensc.xyz[1, :]))
@@ -268,15 +270,17 @@ function transferfield!(ff::F, fensf::FENodeSet, fesf::AbstractFESet, fc::F, fen
             fenscsub, newnumber = compactnodes(fensc, connected); # nodes of the sub mesh
             fescsub = renumberconn!(fescsub, newnumber); # elements of the sub mesh
             present = findall(x -> x > 0, newnumber)
-            fcsub  =  NodalField(fc.values[present, :]) # reduce the coarse-mesh field to the sub mesh
-            # Now we can find the values at the nodes of the subset of the fine mesh 
+            fcsub  =  NodalField(dofvaluesasarray(fc)[present, :]) # reduce the coarse-mesh field to the sub mesh
+            # Now we can find the values at the nodes of the subset of the fine mesh
             # working only with the sub mesh of the coarse mesh
             for i in pnl # for all nodes in the subset
                 nl = vselect(fenscsub.xyz; nearestto = fensf.xyz[i, :])
                 # For each node in the fine field try to find one in  the coarse field
                 if !isempty(nl) && norm(fensf.xyz[i, :] - fenscsub.xyz[nl[1], :]) < geometricaltolerance
                     # These nodes correspond in the  refined  and coarse mesh
-                    ff.values[i, :] = fcsub.values[nl[1], :]
+                    for lj in 1:ndofs(ff)
+                        setdofvalue!(ff, i, lj, getdofvalue(fcsub, nl[1], lj))
+                    end
                 else
                     # Obviously, some nodes in the fine mesh are not located "at" the
                     # location of a coarse-mesh node. Then we have to search which
@@ -291,7 +295,12 @@ function transferfield!(ff::F, fensf::FENodeSet, fesf::AbstractFESet, fc::F, fen
                         @assert success # this shouldn't be tripped; normally we succeed
                         if inparametric(fescsub, pc; tolerance = parametrictolerance) # coarse mesh element encloses the node
                             N = bfun(fescsub,  pc)
-                            ff.values[i, :] = transpose(N) * fcsub.values[c, :]
+                            fill!(vals, zero(T))
+                            for (wn, jjj) in enumerate(c)
+                                 vals1 = getdofvalues!(fcsub, vals1, jjj)
+                                 vals .+= N[wn] .* vals1
+                            end
+                            setdofvalues!(ff, i, vals)
                             break
                         end
                     end
@@ -299,11 +308,12 @@ function transferfield!(ff::F, fensf::FENodeSet, fesf::AbstractFESet, fc::F, fen
             end # for i in pnl # for all nodes in the subset
         end # if !isempty(sublist)
     end # for p = 1:npartitions
-    
-    # Check that we haven't missed any node connected to some finite elements. 
+
+    # Check that we haven't missed any node connected to some finite elements.
     cnl = connectednodes(fesf)
-    for i = cnl
-        if any(v -> v == Inf, ff.values[i, :])
+    for i in cnl
+        vals = getdofvalues!(ff, vals, i)
+        if any(v -> v == Inf, vals)
             println("fensf.xyz[$i, :] = $(fensf.xyz[i, :])")
             error("Missed node in transfer")
         end
@@ -333,6 +343,7 @@ Elemental field `ff` transferred to the fine mesh is output.
 """
 function transferfield!(ff::F, fensf::FENodeSet, fesf::AbstractFESet, fc::F, fensc::FENodeSet, fesc::AbstractFESet, geometricaltolerance::FFlt; parametrictolerance::FFlt = 0.01)  where {T<:Number, F<:ElementalField{T}}
     @assert count(fesf) == nents(ff)
+    vals = fill(zero(T), ndofs(ff))
     nodebox = initbox!([], vec(fensc.xyz[1, :]))
     centroidpc = centroidparametric(fesf)
     N = bfun(fesf, centroidpc)
@@ -357,7 +368,7 @@ function transferfield!(ff::F, fensf::FENodeSet, fesf::AbstractFESet, fc::F, fen
             # end
             # @assert success # this shouldn't be tripped; normally we succeed
             if success &&  inparametric(fesc, pc; tolerance = 0.001) # coarse mesh element encloses the centroid
-                ff.values[i, :] = fc.values[e, :]
+                setdofvalues!(ff, i, getdofvalues!(fc, vals, e))
                 foundone = true
                 break
             end
@@ -400,7 +411,7 @@ function distribloads(self::FEMM, assembler::A,
     for i = 1:nfes # Loop over elements
         fill!(Fe, 0.0);
         for j = 1:npts
-            locjac!(loc, J, geom.values, fes.conn[i], Ns[j], gradNparams[j]) 
+            locjac!(loc, J, geom, fes.conn[i], Ns[j], gradNparams[j])
             Jac = Jacobianmdim(self.integdomain, J, loc, fes.conn[i],  Ns[j], m);
             force = updateforce!(fi, loc, J, fes.label[i]); # retrieve the applied load
             Factor::FFlt = (Jac * w[j]);
@@ -422,7 +433,7 @@ function distribloads(self::FEMM, assembler::A,
 end
 
 function distribloads(self::FEMM, geom::NodalField{FFlt}, P::NodalField{T}, fi::ForceIntensity, m::FInt) where {FEMM<:AbstractFEMM, T<:Number}
-    assembler = SysvecAssembler(0.0*P.values[1])#T(0.0))
+    assembler = SysvecAssembler(zero(T))
     return distribloads(self, assembler, geom, P, fi, m)
 end
 
@@ -534,7 +545,7 @@ Keyword arguments
 - `reportat` = at which point should the  element quantities be reported?
     This argument is interpreted inside the `inspectintegpoints()` method.
 
-# Output 
+# Output
 - the new field that can be used to map values to colors and so on
 """
 function fieldfromintegpoints(self::FEMM,
@@ -654,7 +665,7 @@ Construct elemental field from integration points.
 `component`- component of the 'quantity' array: see the material update()
            method.
 
-# Output 
+# Output
  - the new field that can be used to map values to colors and so on
 """
 function elemfieldfromintegpoints(self::FEMM,
@@ -765,7 +776,7 @@ function innerproduct(self::FEMM, assembler::A, geom::NodalField{FFlt}, afield::
     for i = 1:count(fes) # Loop over elements
         fill!(elmat, 0.0); # Initialize element matrix
         for j = 1:npts # Loop over quadrature points
-            locjac!(loc, J, geom.values, fes.conn[i], Ns[j], gradNparams[j]) 
+            locjac!(loc, J, geom, fes.conn[i], Ns[j], gradNparams[j])
             Jac = Jacobianvolume(self.integdomain, J, loc, fes.conn[i], Ns[j]);
             thefactor::FFlt =(Jac*w[j]);
             elmat .+= NexpTNexp[j]*thefactor
