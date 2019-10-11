@@ -607,7 +607,7 @@ function prescribeddofs(uebc::F, u::F) where {T, F<:AbstractField{T}}
     @assert nents(uebc) == nents(u)
     @assert ndofs(uebc) == ndofs(u)
 	dofnums = FInt[]
-	prescribedvalues = eltype(uebc.values)[]
+	prescribedvalues = T[]
 	nent, ndof = nents(uebc), ndofs(uebc)
 	for i in 1:nent
 		for j in 1:ndof
@@ -678,6 +678,7 @@ function isfixedasarray(self::F) where {T, F<:AbstractField{T}}
     end
     return values
 end
+
 """
     setdofvalue!(self::F, ent, dof, val::T) where {T, F<:AbstractField{T}}
 
@@ -763,6 +764,16 @@ Get the value of a degree of freedom from the vector of dofs.
 """
 function getdofvalue(v::Vector{FieldDOFData{T}}, dof) where {T}
     return v[dof].dofvalue
+end
+
+"""
+    setdofnum!(self::F, ent, dof, val::Int) where {T, F<:AbstractField{T}}
+
+Set the degree of freedom number at a given entity.
+"""
+function setdofnum!(self::F, ent, dof, val::Int) where {T, F<:AbstractField{T}}
+    self.data[ent][dof].dofnum = val
+    return self
 end
 
 """
