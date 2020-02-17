@@ -1934,3 +1934,164 @@ end
 end
 using .mxmeasure1
 mxmeasure1.test()
+
+module maddbts1
+using FinEtools
+using FinEtools.MatrixUtilityModule: add_btsigma!
+using LinearAlgebra: norm
+using Test
+function test()
+	for i in 1:10
+		B = rand(6, 30)
+		s = rand(6)
+		c = rand()
+		F1 = B' * (c * s)
+		F2 = fill(0.0, size(B, 2))
+		add_btsigma!(F2, B, c, s)
+		@test norm(F1 - F2) / norm(F1) < 1.0e-6
+	end
+	true
+end
+end
+using .maddbts1
+maddbts1.test()
+
+module mxmatmul3a1
+using FinEtools
+using FinEtools.MatrixUtilityModule: mulCAB!, mulCAtB!, mulCABt!
+using LinearAlgebra: norm
+using Test
+
+function test()
+	for i in 1:10
+		A = rand(3, 3)
+		B = rand(3, 3)
+		C = rand(3, 3)
+		@test norm(mulCAB!(Val(3), C, A, B) .- A*B) <= 1.0e-6 * norm(C)
+	end
+    for i in 1:10
+    	A = rand(3, 3)
+    	B = rand(3, 3)
+    	C = rand(3, 3)
+    	@test norm(mulCABt!(Val(3), C, A, B) .- A*B') <= 1.0e-6 * norm(C)
+    end
+    for i in 1:10
+    	A = rand(3, 3)
+    	B = rand(3, 3)
+    	C = rand(3, 3)
+    	@test norm(mulCAtB!(Val(3), C, A, B) .- A'*B) <= 1.0e-6 * norm(C)
+    end
+    true
+end
+end
+using .mxmatmul3a1
+mxmatmul3a1.test()
+
+
+module mxmatmul3a2
+using FinEtools
+using FinEtools.MatrixUtilityModule: mulCAB!, mulCAtB!, mulCABt!
+using LinearAlgebra: norm
+using Test
+
+function test()
+	for i in 1:10
+		A = rand(3, 5)
+		B = rand(5, 3)
+		C = A * B
+		@test norm(mulCAB!(C, A, B) .- A*B) <= 1.0e-6 * norm(C)
+	end
+    for i in 1:10
+    	A = rand(8, 3)
+    	B = rand(8, 3)
+    	C = A' * B
+    	@test norm(mulCAtB!(C, A, B) .- A'*B) <= 1.0e-6 * norm(C)
+    end
+    for i in 1:10
+    	A = rand(8, 3)
+    	B = rand(8, 3)
+    	C = A * B'
+    	@test norm(mulCABt!(C, A, B) .- A*B') <= 1.0e-6 * norm(C)
+    end
+    true
+end
+end
+using .mxmatmul3a2
+mxmatmul3a2.test()
+
+module mxmatmul3a3
+using FinEtools
+using FinEtools.MatrixUtilityModule: detC
+using LinearAlgebra: norm, det
+using Test
+
+function test()
+	for i in 1:10
+		C = rand(3, 3)
+		@test abs(detC(Val(3), C) - det(C)) <= 1.0e-6 * norm(C)
+	end
+    true
+end
+end
+using .mxmatmul3a3
+mxmatmul3a3.test()
+
+module mrotationmatrixs1
+using FinEtools
+using LinearAlgebra: norm, I
+# using BenchmarkTools
+using Test
+function test()
+    for i in 1:10
+        Rmout = rand(3, 3)
+        a = rand(3)
+        # Rmout = [0.056575544213388396 0.8235145288079604 0.4566335160952417; 0.6335215149040396 0.8852762577618685 0.803417762628938; 0.5940995203626245 0.35601280936101065 0.6825575362008556]                                                                                                 
+        # a = [0.11011521831193871, 0.5097478695998647, 0.8139760429477749]  
+        rotmat3!(Rmout, a)
+        # Rmout = [0.5736166081143759 -0.6670428981551146 0.47541325067375245; 0.7189364978350996 0.6881251218379588 0.0980516638109532; -0.3925484670406451 
+        # 0.2855478746485778 0.8742814834523946]      
+        @test norm(Rmout'*Rmout - 1.0*I) <= 1.0e-6
+        # @btime rotmat3!($Rmout, $a)
+    end
+    true
+end
+end
+using .mrotationmatrixs1
+mrotationmatrixs1.test()
+
+module mrotationmatrixs2
+using FinEtools
+using LinearAlgebra: norm, I
+# using BenchmarkTools
+using Test
+function rotmat3original!(Rmout, a) 
+    na = norm(a);
+    thetatilde = zeros(3,3);
+    skewmat!(thetatilde, a);
+    a = a/na;
+    ca = cos(na);
+    sa = sin(na);
+    aa = a*a';
+    copyto!(Rmout, ca * (1.0*I-aa) + sa/na*thetatilde + aa);
+    return Rmout
+end
+function test()
+    for i in 1:10
+        Rmout = rand(3, 3)
+        a = rand(3)
+        # Rmout = [0.056575544213388396 0.8235145288079604 0.4566335160952417; 0.6335215149040396 0.8852762577618685 0.803417762628938; 0.5940995203626245 0.35601280936101065 0.6825575362008556]                                                                                                 
+        # a = [0.11011521831193871, 0.5097478695998647, 0.8139760429477749]  
+        rotmat3!(Rmout, a)
+        Rmout2 = rand(3, 3)
+        rotmat3original!(Rmout2, a) 
+        # Rmout = [0.5736166081143759 -0.6670428981551146 0.47541325067375245; 0.7189364978350996 0.6881251218379588 0.0980516638109532; -0.3925484670406451 
+        # 0.2855478746485778 0.8742814834523946]      
+        @test norm(Rmout-Rmout2) <= 1.0e-6
+        # @btime rotmat3!($Rmout, $a)
+    end
+    true
+end
+end
+using .mrotationmatrixs2
+mrotationmatrixs2.test()
+

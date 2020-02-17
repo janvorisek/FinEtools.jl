@@ -1,6 +1,5 @@
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
 [![Build Status](https://travis-ci.org/PetrKryslUCSD/FinEtools.jl.svg?branch=master)](https://travis-ci.org/PetrKryslUCSD/FinEtools.jl) [![codecov.io](http://codecov.io/github/PetrKryslUCSD/FinEtools.jl/coverage.svg?branch=master)](http://codecov.io/github/PetrKryslUCSD/FinEtools.jl?branch=master)
-[![Build status](https://ci.appveyor.com/api/projects/status/0qgyw2aa2529fahy?svg=true)](https://ci.appveyor.com/project/PetrKryslUCSD/finetools-jl)  [![Coverage Status](https://coveralls.io/repos/github/PetrKryslUCSD/FinEtools.jl/badge.svg?branch=master)](https://coveralls.io/github/PetrKryslUCSD/FinEtools.jl?branch=master)
 
 [![][docs-latest-img]][docs-latest-url]
 
@@ -18,11 +17,14 @@ The package supports application packages, for instance:
 - [Linear acoustics](https://github.com/PetrKryslUCSD/FinEtoolsAcoustics.jl);
 - [Heat conduction](https://github.com/PetrKryslUCSD/FinEtoolsHeatDiff.jl);
 - [Linear stress analysis](https://github.com/PetrKryslUCSD/FinEtoolsDeforLinear.jl);
-- [Nonlinear stress analysis](https://github.com/PetrKryslUCSD/FinEtoolsDeforNonlinear.jl).
+- [Nonlinear stress analysis](https://github.com/PetrKryslUCSD/FinEtoolsDeforNonlinear.jl);
+- [Vibration in fluids](https://github.com/PetrKryslUCSD/FinEtoolsVibInFluids.jl).
 
 ## News
 
-- 10/11/2019: Corrected a design blunder in the matrix utilities.
+- 01/23/2020: Dependencies have been updated to work with Julia 1.3.1.
+- 01/02/2020: Matrix multiplication code improved with the help of the `LoopVectorization` package.
+
 
 [Past news](oldnews.md)
 
